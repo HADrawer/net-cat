@@ -21,7 +21,7 @@ type Server struct {
 	length     int
 	maxClients int
 	mu         sync.Mutex
-	clients    map[net.Conn]struct{}
+	clients    map[net.Conn]string
 	clientMu   sync.Mutex
 }
 
@@ -32,7 +32,7 @@ func NewServer(listenAddr string) *Server {
 		msgch:      make(chan Message, 10),
 		length:     0,
 		maxClients: 2,
-		clients:    make(map[net.Conn]struct{}),
+		clients:    make(map[net.Conn]string),
 	}
 }
 
@@ -72,7 +72,7 @@ func (s *Server) acceptLoop() {
 		s.mu.Unlock()
 
 		s.clientMu.Lock()
-		s.clients[conn] = struct{}{}
+		s.clients[conn] = ""
 		s.clientMu.Unlock()
 
 		fmt.Println("new connection to the server:", conn.RemoteAddr())
@@ -105,27 +105,27 @@ func (s *Server) readLoop(conn net.Conn) {
 
 	if name == "" {
 		conn.Write([]byte("No name provided"))
-		
 		return
 		} 
-		WelMes := append([]byte(name), []byte(" joined the Chat \n")...)
-		s.broadcast(WelMes)
+
+		s.clientMu.Lock()
+		s.clients[conn] = name
+		s.clientMu.Unlock()
+
+		s.broadcast([]byte(name + " joined the Chat \n"))
 
 	buf := make([]byte, 2048)
 	for {
-		conn.Write([]byte("["))
-		conn.Write([]byte(name))
-		conn.Write([]byte("]:"))
+		
 		n, err := conn.Read(buf)
 		if err != nil {
-			fmt.Println("The user left the Chat")
-			conn.Write([]byte("The user left the Chat"))
+			fmt.Printf("%s left the Chat \n", conn.RemoteAddr())
+			s.broadcast([]byte(name +" left the Chat", ))
 			break
 		}
-
-		msg := append([]byte("["),[]byte(name)...)
-		msg = append(msg,[]byte("]: ")...)
-		msg = append(msg, buf[:n]...)
+		
+	
+		msg := append([]byte("["+name+"]"), buf[:n]...)
 		s.broadcast(msg)
 	}
 }
@@ -133,13 +133,13 @@ func(s *Server) broadcast(msg []byte){
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
 
-	for client := range s.clients {
-		_, err := client.Write(msg)
-		if err != nil {
-			fmt.Println("Error broadcasting message:", err)
-		}
+	for client, name := range s.clients {
+	if name != ""{
+		client.Write(msg)
+	}
 	}
 }
+
 
 func main() {
 	server := NewServer(":3000")
