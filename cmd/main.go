@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 )
 
@@ -31,7 +32,7 @@ func NewServer(listenAddr string) *Server {
 		quitch:     make(chan struct{}),
 		msgch:      make(chan Message, 10),
 		length:     0,
-		maxClients: 2,
+		maxClients: 10,
 		clients:    make(map[net.Conn]string),
 	}
 }
@@ -63,7 +64,7 @@ func (s *Server) acceptLoop() {
 		s.mu.Lock()
 		if s.length >= s.maxClients {
 			s.mu.Unlock()
-			conn.Write([]byte("The Chat is Maximum"))
+			conn.Write([]byte("The Chat is Maximum \n"))
 			conn.Close()
 			fmt.Println("The Chat is Maximum")
 			continue
@@ -104,50 +105,50 @@ func (s *Server) readLoop(conn net.Conn) {
 	name := string(nameBuf[:n-1])
 
 	if name == "" {
-		conn.Write([]byte("No name provided"))
+		conn.Write([]byte("No name provided \n"))
 		return
-		} 
+	}
 
-		s.clientMu.Lock()
-		s.clients[conn] = name
-		s.clientMu.Unlock()
-
-		s.broadcast([]byte(name + " joined the Chat \n"))
+	s.clientMu.Lock()
+	s.clients[conn] = name
+	s.clientMu.Unlock()
+	s.broadcast([]byte(name + " joined the Chat \n"))
 
 	buf := make([]byte, 2048)
 	for {
-		
+
 		n, err := conn.Read(buf)
 		if err != nil {
 			fmt.Printf("%s left the Chat \n", conn.RemoteAddr())
-			s.broadcast([]byte(name +" left the Chat", ))
+			s.broadcast([]byte(name + " left the Chat \n"))
 			break
 		}
-		
-	
-		msg := append([]byte("["+name+"]"), buf[:n]...)
+		msg := buf[:n]
+
+		messageStr := string(msg)
+		messageStr = strings.TrimSpace(messageStr)
+		if len(messageStr) == 0 {
+			conn.Write([]byte("The Message is Empty \n"))
+			continue
+		}
+		msg = append([]byte("["+name+"]"), []byte(messageStr+"\n")...)
 		s.broadcast(msg)
+
 	}
 }
-func(s *Server) broadcast(msg []byte){
+func (s *Server) broadcast(msg []byte) {
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
 
 	for client, name := range s.clients {
-	if name != ""{
-		client.Write(msg)
-	}
+		if name != "" {
+			client.Write(msg)
+		}
 	}
 }
-
 
 func main() {
 	server := NewServer(":3000")
 
-	// go func() {
-	// 	for msg := range server.msgch {
-	// 		fmt.Printf("[%s]: %s", msg.from, string(msg.payload))
-	// 	}
-	// }()
 	log.Fatal(server.Start())
 }
