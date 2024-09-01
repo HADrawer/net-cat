@@ -66,7 +66,8 @@ func (s *Server) readLoop(conn net.Conn) {
 	}()
 
 	conn.Write(WelcomeMessage())
-
+	
+	
 	nameBuf := make([]byte, 256)
 	n, err := conn.Read(nameBuf)
 	if err != nil {
@@ -84,6 +85,11 @@ func (s *Server) readLoop(conn net.Conn) {
 		conn.Write([]byte("The name is used \n"))
 		return
 	}
+	s.clientMu.Lock()
+	for _, msg := range s.messageHistory {
+		conn.Write([]byte(msg))
+	}
+	s.clientMu.Unlock()
 
 	s.clientMu.Lock()
 	s.clients[conn] = name
@@ -111,6 +117,8 @@ func (s *Server) readLoop(conn net.Conn) {
 		formatted := now.Format("2006-01-02 15:04:05")
 		msg = append([]byte("["+name+"]:"), []byte(messageStr+"\n")...)
 		msg = append([]byte("["+formatted +"]") , msg...)
+		s.messageHistory = append(s.messageHistory, string(msg))
+
 		s.broadcast(msg)
 
 	}

@@ -18,6 +18,7 @@ type Server struct {
 	mu         sync.Mutex
 	clients    map[net.Conn]string
 	clientMu   sync.Mutex
+	messageHistory []string
 }
 
 func NewServer(listenAddr string) *Server {
